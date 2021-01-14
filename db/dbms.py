@@ -66,12 +66,17 @@ def delete_payer(name: str) -> None:
     conn.commit()
 
 
-def all_credits() -> List:
+def total_credit() -> str:
     cursor.execute("SELECT payer, SUM(credit) "
                    "FROM Cost "
                    "GROUP BY payer")
     rows = cursor.fetchall()
-    return rows
+    if float(rows[0][1]) == float(rows[1][1]):
+        return "Вы в рассчёте"
+    elif float(rows[0][1]) > float(rows[1][1]):
+        return f"{rows[1][0]} должен {float(rows[0][1]) - float(rows[1][1])}"
+    else:
+        return f"{rows[0][0]} должен {float(rows[1][1]) - float(rows[0][1])}"
 
 
 def all_payers() -> List:
