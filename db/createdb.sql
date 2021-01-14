@@ -4,4 +4,8 @@ CREATE TABLE Cost(
     payer TEXT,
     credit DECIMAL,
     shop TEXT
+);
+
+CREATE TABLE Payer(
+    name TEXT PRIMARY KEY
 )
