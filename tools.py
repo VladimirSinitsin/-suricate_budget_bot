@@ -1,8 +1,24 @@
 import json
 import cv2
+import datetime
+import pytz
 from pyzbar import pyzbar
 
+import db.dbms as db
 from nalog_python import NalogRuPython
+
+
+TIME_ZONE = 'Europe/Moscow'
+
+
+def get_now_formatted() -> str:
+    return _get_now_datetime().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _get_now_datetime() -> datetime.datetime:
+    tz = pytz.timezone(TIME_ZONE)
+    now = datetime.datetime.now(tz)
+    return now
 
 
 def scan_qr_image(filename: str) -> str:
