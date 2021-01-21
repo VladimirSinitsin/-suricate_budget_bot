@@ -1,3 +1,6 @@
+"""
+Файл для демонстрации работы скрипта по обработке qr-кода.
+"""
 from nalog_python import NalogRuPython
 
 import json
