@@ -6,7 +6,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.dispatcher import FSMContext
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from middlewares import AccessMiddleware
+from tools import AccessMiddleware
 
 import db.dbms as db
 from bot_config import TOKEN, SELECTED_USERS
@@ -51,10 +51,11 @@ async def total(message):
 async def send_costs(message, costs):
     if not costs:
         await message.answer("Список пуст.")
-    answer = ''
-    for cost in costs:
-        answer += cost + f" для удаления нажмите /del{cost.split(')')[0]}\n\n"
-    await message.answer(answer)
+    else:
+        answer = ''
+        for cost in costs:
+            answer += cost + f" для удаления нажмите /del{cost.split(')')[0]}\n\n"
+        await message.answer(answer)
 
 
 @dp.message_handler(commands=['last_costs'])
