@@ -49,6 +49,50 @@ def fetchall(table: str, columns: List[str]) -> List[Dict]:
     return result
 
 
+def table_is_empty(table: str) -> bool:
+    """
+    Содержит ли таблица строки.
+    :param table: название таблицы.
+    :return:
+    """
+    cursor.execute(f"SELECT * FROM {table}")
+    return False if cursor.fetchall() else True
+
+
+def add_cost(cost: Dict) -> None:
+    """
+    Добавление расхода в таблицу.
+    :param cost: словарь с данными по расходу.
+    :return:
+    """
+    insert("Cost", {"data": cost['дата'],
+                    "payer": cost['плательщик'],
+                    "credit": cost['сумма'],
+                    "shop": cost['магазин']})
+
+
+def add_payer(name: str) -> None:
+    """
+    Добавление плательщика в таблицу.
+    :param name: имя плательщика.
+    :return:
+    """
+    if len(all_payers()) >= 2:
+        raise Exception("Достугнуто максимальное количество плательщиков (2)!")
+    insert("Payer", {"name": name})
+
+
+def other_payer(payer: str) -> str:
+    """
+    Получение имени второго плательщика.
+    :param payer: имя данного плательщика.
+    :return: имя второго.
+    """
+    payers = all_payers()
+    current_index = payers.index(payer)
+    return payers[current_index - 1]
+
+
 def delete_cost(row_id: int) -> None:
     """
     Удаление долга из БД по id.
@@ -62,24 +106,44 @@ def delete_payer(name: str) -> None:
     """
     Удаление плательщика из БД.
     """
-    cursor.execute(f"delete from Payer where name={name}")
+    cursor.execute(f'delete from Payer where name="{name}"')
     conn.commit()
 
 
 def total_credit() -> str:
+    """
+    Итог, кто сколько должен.
+    :return: вывод.
+    """
     cursor.execute("SELECT payer, SUM(credit) "
                    "FROM Cost "
                    "GROUP BY payer")
     rows = cursor.fetchall()
-    if float(rows[0][1]) == float(rows[1][1]):
+    if not rows:
+        return "Расходов не было."
+    elif len(rows) == 1:
+        return f"{other_payer(rows[0][0])} должен(-на) {round(float(rows[0][1]), 2)}"
+    elif float(rows[0][1]) == float(rows[1][1]):
         return "Вы в рассчёте"
     elif float(rows[0][1]) > float(rows[1][1]):
-        return f"{rows[1][0]} должен {float(rows[0][1]) - float(rows[1][1])}"
+        return f"{rows[1][0]} должен(-на) {round(float(rows[0][1]) - float(rows[1][1]), 2)}"
     else:
-        return f"{rows[0][0]} должен {float(rows[1][1]) - float(rows[0][1])}"
+        return f"{rows[0][0]} должен(-на) {round(float(rows[1][1]) - float(rows[0][1]), 2)}"
+
+
+def all_costs() -> List:
+    cursor.execute("SELECT * "
+                   "FROM Cost ")
+    rows = cursor.fetchall()
+    costs = [f"{row[0]}) {row[1]} {row[2]} совершил(-а) покупку на {row[3]} в {row[4]}" for row in rows]
+    return costs
 
 
 def all_payers() -> List:
+    """
+    Все плательщики.
+    :return: список строк-имён.
+    """
     cursor.execute("SELECT * "
                    "FROM Payer ")
     rows = cursor.fetchall()
@@ -87,7 +151,24 @@ def all_payers() -> List:
     return names
 
 
+def current_payers() -> List:
+    """
+    Все плательщики, совершавшие покупки.
+    :return: список строк-имён.
+    """
+    cursor.execute("SELECT payer "
+                   "FROM Cost "
+                   "GROUP BY payer")
+    rows = cursor.fetchall()
+    names = [row[0] for row in rows]
+    return names
+
+
 def delete_db() -> None:
+    """
+    Полная очистка БД.
+    :return:
+    """
     global conn
     global cursor
 
@@ -98,6 +179,10 @@ def delete_db() -> None:
 
 
 def delete_all_costs() -> None:
+    """
+    Очистка всех расходов из БД.
+    :return:
+    """
     cursor.execute(f"DROP TABLE Cost;")
     cursor.execute("CREATE TABLE Cost("
                    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -110,6 +195,10 @@ def delete_all_costs() -> None:
 
 
 def delete_all_payers() -> None:
+    """
+    Очистка всех плательщиков из БД.
+    :return:
+    """
     cursor.execute(f"DROP TABLE Payer;")
     cursor.execute("CREATE TABLE Payer("
                    "name TEXT PRIMARY KEY"
