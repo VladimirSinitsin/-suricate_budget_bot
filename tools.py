@@ -56,18 +56,19 @@ def parse_custom_cost_message(raw_message: str) -> Dict:
     return {'магазин': shop, 'сумма': price, 'дата': get_now_formatted()}
 
 
-def scan_qr_image(filename: str) -> str:
+async def scan_qr_image(image) -> str:
     """
     Обрабатывает qr-код чека на снимке.
     :param filename:
     :return: данные по чеку в виде json дампа.
     """
-    image = cv2.imread(filename)
     # Находим qr-коды на изображении и обрабатываем их.
     qr_codes = [barcode for barcode in pyzbar.decode(image) if barcode.type == 'QRCODE']
 
     if len(qr_codes) > 1:
         raise Exception("Ошибка! Распознано больше одного qr-кода.")
+    if len(qr_codes) == 0:
+        raise Exception("Ошибка! QR-код не найден!")
 
     qr_data = qr_codes[0].data.decode("utf-8")
     # Обрабатываем текст из qr-кода чека.
