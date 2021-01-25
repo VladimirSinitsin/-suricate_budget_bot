@@ -125,14 +125,40 @@ async def process_message(message, state):
 
 @dp.message_handler(commands=['clear_costs'])
 async def clear_all_costs(message):
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    confirmation = InlineKeyboardButton("Очистить расходы", callback_data="Очистить расходы")
+    keyboard.add(confirmation)
+
+    await message.answer("Вы точно хотите очистить все расходы?\n"
+                         "Это действие невозможно отменить.\n\n"
+                         "(если Вы ошиблись, то просто продолжайте пользоваться ботом, не нажимая кнопку ниже)",
+                         reply_markup=keyboard)
+
+
+# Удаление расходов, подтверждённое пользователем.
+@dp.callback_query_handler(lambda c: c.data == "Очистить расходы")
+async def confirmed_clear_costs(callback_query):
     db.delete_all_costs()
-    await message.answer("Все расходы удалены!")
+    await bot.send_message(callback_query.message.chat.id, "Все расходы удалены!")
 
 
 @dp.message_handler(commands=['clear_db'])
 async def clear_db(message):
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    confirmation = InlineKeyboardButton("Очистить БД", callback_data="Очистить БД")
+    keyboard.add(confirmation)
+
+    await message.answer("Удаление базы данных (БД) полностью очистит списки расходов и плательщиков.\n"
+                         "Это действие невозможно отменить. Вы точно хотите очистить БД?\n\n"
+                         "(если Вы ошиблись, то просто продолжайте пользоваться ботом, не нажимая кнопку ниже)",
+                         reply_markup=keyboard)
+
+
+# Удаление БД, подтверждённое пользователем.
+@dp.callback_query_handler(lambda c: c.data == "Очистить БД")
+async def confirmed_clear_db(callback_query):
     db.delete_db()
-    await message.answer("База данных полностью очищена!")
+    await bot.send_message(callback_query.message.chat.id, "База данных полностью очищена!")
 
 
 if __name__ == '__main__':
