@@ -86,7 +86,7 @@ async def last_costs(message):
 async def del_cost(message):
     row_id = int(message.text[4:])
     db.delete_cost(row_id)
-    answer_message = "Расход удалён"
+    answer_message = "❌ Расход удалён ❌"
     await message.answer(answer_message)
 
 
@@ -100,7 +100,7 @@ async def all_costs(message):
 async def all_payers(message):
     payers = db.all_payers()
     if not payers:
-        await message.answer("Сурикаты не найдены :(")
+        await message.answer("Сурикаты не найдены 😢")
     else:
         answer = 'Сурикаты:\n\n'
         for payer in payers:
@@ -124,24 +124,24 @@ async def process_message(message, state):
             db.add_payer(name)
         except Exception as e:
             print('Возникла ошибка: ', e)
-            await message.answer(f"Что-то пошло не так: {e}")
+            await message.answer(f"🆘 Что-то пошло не так: {e}")
         else:
-            await message.answer(f"{name} добавлен(-а) в список сурикатов!")
+            await message.answer(f"✅ {name} добавлен(-а) в список сурикатов!")
             if len(db.all_payers()) < 2:
-                await message.answer("Сурикату одиноко :(\nДобавьте ему пару через /add_payer")
+                await message.answer("Сурикату одиноко 😢\nДобавьте ему пару через /add_payer")
             else:
-                await message.answer("Ого! Да у нас тут целая сурикачья семья.\nМожем приступать к ведению бюджета!")
+                await message.answer("💃 Ого! Да у нас тут целая сурикачья семья.\nМожем приступать к ведению бюджета!")
     await state.finish()
 
 
 @dp.message_handler(commands=['clear_costs'])
 async def clear_all_costs(message):
     keyboard = InlineKeyboardMarkup(row_width=1)
-    confirmation = InlineKeyboardButton("Очистить расходы", callback_data="Очистить расходы")
+    confirmation = InlineKeyboardButton("🚫 Очистить расходы 🚫", callback_data="Очистить расходы")
     keyboard.add(confirmation)
 
-    await message.answer("Вы точно хотите очистить все расходы?\n"
-                         "Это действие невозможно отменить.\n\n"
+    await message.answer("❗️ Вы точно хотите очистить все расходы? ❗️\n"
+                         "‼️ Это действие невозможно отменить. ‼️\n\n"
                          "(если Вы ошиблись, то просто продолжайте пользоваться ботом, не нажимая кнопку ниже)",
                          reply_markup=keyboard)
 
@@ -150,17 +150,17 @@ async def clear_all_costs(message):
 @dp.callback_query_handler(lambda c: c.data == "Очистить расходы")
 async def confirmed_clear_costs(callback_query):
     db.delete_all_costs()
-    await bot.send_message(callback_query.message.chat.id, "Все расходы удалены!")
+    await bot.send_message(callback_query.message.chat.id, "✅ Все расходы удалены!")
 
 
 @dp.message_handler(commands=['clear_db'])
 async def clear_db(message):
     keyboard = InlineKeyboardMarkup(row_width=1)
-    confirmation = InlineKeyboardButton("Очистить БД", callback_data="Очистить БД")
+    confirmation = InlineKeyboardButton("🚫 Очистить БД 🚫", callback_data="Очистить БД")
     keyboard.add(confirmation)
 
-    await message.answer("Удаление базы данных (БД) полностью очистит списки расходов и плательщиков.\n"
-                         "Это действие невозможно отменить. Вы точно хотите очистить БД?\n\n"
+    await message.answer("❗️ Удаление базы данных (БД) полностью очистит списки расходов и плательщиков. ❗️\n"
+                         "‼ Это действие невозможно отменить. Вы точно хотите очистить БД? ‼\n\n"
                          "(если Вы ошиблись, то просто продолжайте пользоваться ботом, не нажимая кнопку ниже)",
                          reply_markup=keyboard)
 
@@ -169,7 +169,7 @@ async def clear_db(message):
 @dp.callback_query_handler(lambda c: c.data == "Очистить БД")
 async def confirmed_clear_db(callback_query):
     db.delete_db()
-    await bot.send_message(callback_query.message.chat.id, "База данных полностью очищена!")
+    await bot.send_message(callback_query.message.chat.id, "✅ База данных полностью очищена!")
 
 
 async def get_keyboard_payers(alias):
@@ -190,17 +190,17 @@ async def add_custom_cost(message):
     global custom_cost
 
     if len(db.all_payers()) < 2:
-        await message.answer("Сурикатов должно быть двое.\n"
+        await message.answer("⚠️ Сурикатов должно быть двое. ⚠️\n"
                              "Добавьте их через команду /add_payer")
     else:
         try:
             custom_cost = parse_custom_cost_message(message.text)
         except Exception as e:
             print('Возникла ошибка: ', e)
-            await message.answer("Что-то пошло не так...\n"
-                                 "Вводите расходы в виде МАГАЗИН - СТОИМОСТЬ.")
+            await message.answer("🆘 Что-то пошло не так...\n"
+                                 "⚠ Вводите расходы в виде МАГАЗИН - СТОИМОСТЬ. ⚠")
         else:
-            await message.answer("Кто оплатил покупку?", reply_markup=await get_keyboard_payers(alias='custom_'))
+            await message.answer("Кто оплатил покупку? 🧐", reply_markup=await get_keyboard_payers(alias='custom_'))
 
 
 @dp.callback_query_handler(lambda c: c.data[:6] == 'custom')
@@ -211,7 +211,7 @@ async def select_payer(callback_query):
     db.add_cost(custom_cost)
 
     await bot.send_message(callback_query.message.chat.id,
-                           f"Покупка от {custom_cost['дата']} в {custom_cost['магазин']} "
+                           f"✅ Покупка от {custom_cost['дата']} в {custom_cost['магазин']} "
                            f"на сумму {custom_cost['сумма']} рублей добавлена в расходы, "
                            f"которые оплатил(-а) {custom_cost['плательщик']}.")
 
