@@ -6,15 +6,21 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.dispatcher import FSMContext
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from tools import AccessMiddleware
 
 import db.dbms as db
 from bot_config import TOKEN, SELECTED_USERS
+from tools import AccessMiddleware, parse_custom_cost_message
 
 
 # Состояния для приёма ответов-сообщений от пользователя.
 class Statements(StatesGroup):
     adding_payer = State()
+
+
+custom_cost = {'дата': None,
+               'плательщик': None,
+               'сумма': None,
+               'магазин': None}
 
 
 # Инициализация бота.
@@ -117,6 +123,7 @@ async def process_message(message, state):
         try:
             db.add_payer(name)
         except Exception as e:
+            print('Возникла ошибка: ', e)
             await message.answer(f"Что-то пошло не так: {e}")
         else:
             await message.answer(f"{name} добавлен(-а) в список сурикатов!")
@@ -159,6 +166,46 @@ async def clear_db(message):
 async def confirmed_clear_db(callback_query):
     db.delete_db()
     await bot.send_message(callback_query.message.chat.id, "База данных полностью очищена!")
+
+
+async def get_keyboard_payers(alias):
+    """
+    Возвращает клавиатуру с плательщиками.
+    :alias: псевдоним, добавяемый перед callback_data у кнопок.
+    :return: клавиатура с плательщиками.
+    """
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    for payer in db.all_payers():
+        button = InlineKeyboardButton(payer, callback_data=str(alias+payer))
+        keyboard.add(button)
+    return keyboard
+
+
+@dp.message_handler(content_types=["text"])
+async def add_custom_cost(message):
+    global custom_cost
+
+    try:
+        custom_cost = parse_custom_cost_message(message.text)
+    except Exception as e:
+        print('Возникла ошибка: ', e)
+        await message.answer("Что-то пошло не так...\n"
+                             "Вводите расходы в виде МАГАЗИН - СТОИМОСТЬ.")
+    else:
+        await message.answer("Кто оплатил покупку?", reply_markup=await get_keyboard_payers(alias='custom_'))
+
+
+@dp.callback_query_handler(lambda c: c.data[:6] == 'custom')
+async def select_payer(callback_query):
+    global custom_cost
+
+    custom_cost['плательщик'] = callback_query.data[7:]
+    db.add_cost(custom_cost)
+
+    await bot.send_message(callback_query.message.chat.id,
+                           f"Покупка от {custom_cost['дата']} в {custom_cost['магазин']} "
+                           f"на сумму {custom_cost['сумма']} рублей добавлена в расходы, "
+                           f"которые оплатил(-а) {custom_cost['плательщик']}.")
 
 
 if __name__ == '__main__':
