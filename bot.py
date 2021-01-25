@@ -127,6 +127,10 @@ async def process_message(message, state):
             await message.answer(f"Что-то пошло не так: {e}")
         else:
             await message.answer(f"{name} добавлен(-а) в список сурикатов!")
+            if len(db.all_payers()) < 2:
+                await message.answer("Сурикату одиноко :(\nДобавьте ему пару через /add_payer")
+            else:
+                await message.answer("Ого! Да у нас тут целая сурикачья семья.\nМожем приступать к ведению бюджета!")
     await state.finish()
 
 
@@ -185,14 +189,18 @@ async def get_keyboard_payers(alias):
 async def add_custom_cost(message):
     global custom_cost
 
-    try:
-        custom_cost = parse_custom_cost_message(message.text)
-    except Exception as e:
-        print('Возникла ошибка: ', e)
-        await message.answer("Что-то пошло не так...\n"
-                             "Вводите расходы в виде МАГАЗИН - СТОИМОСТЬ.")
+    if len(db.all_payers()) < 2:
+        await message.answer("Сурикатов должно быть двое.\n"
+                             "Добавьте их через команду /add_payer")
     else:
-        await message.answer("Кто оплатил покупку?", reply_markup=await get_keyboard_payers(alias='custom_'))
+        try:
+            custom_cost = parse_custom_cost_message(message.text)
+        except Exception as e:
+            print('Возникла ошибка: ', e)
+            await message.answer("Что-то пошло не так...\n"
+                                 "Вводите расходы в виде МАГАЗИН - СТОИМОСТЬ.")
+        else:
+            await message.answer("Кто оплатил покупку?", reply_markup=await get_keyboard_payers(alias='custom_'))
 
 
 @dp.callback_query_handler(lambda c: c.data[:6] == 'custom')
