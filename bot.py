@@ -12,6 +12,11 @@ import db.dbms as db
 from bot_config import TOKEN, SELECTED_USERS
 
 
+# Состояния для приёма ответов-сообщений от пользователя.
+class Statements(StatesGroup):
+    adding_payer = State()
+
+
 # Инициализация бота.
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
@@ -49,6 +54,12 @@ async def total(message):
 
 
 async def send_costs(message, costs):
+    """
+    Функция для вывода списка расходов.
+    :param message:
+    :param costs: выводимый список расходов.
+    :return:
+    """
     if not costs:
         await message.answer("Список пуст.")
     else:
@@ -64,6 +75,7 @@ async def last_costs(message):
     await send_costs(message, costs)
 
 
+# Обработка команд для удаления расхода по его id.
 @dp.message_handler(lambda message: message.text.startswith('/del'))
 async def del_cost(message):
     row_id = int(message.text[4:])
@@ -80,15 +92,35 @@ async def all_costs(message):
 
 @dp.message_handler(commands=['all_payers'])
 async def all_payers(message):
-    answer = 'Сурикаты:\n\n'
-    for payer in db.all_payers():
-        answer += payer + '\n'
-    await message.answer(answer)
+    payers = db.all_payers()
+    if not payers:
+        await message.answer("Сурикаты не найдены :(")
+    else:
+        answer = 'Сурикаты:\n\n'
+        for payer in payers:
+            answer += payer + '\n'
+        await message.answer(answer)
 
 
 @dp.message_handler(commands=['add_payer'])
 async def add_payer(message):
-    pass
+    await Statements.adding_payer.set()
+    await message.answer("Введите имя плательщика")
+
+
+# Приём имени плательщика.
+@dp.message_handler(state=Statements.adding_payer)
+async def process_message(message, state):
+    async with state.proxy() as data:
+        data['text'] = message.text
+        name = data['text']
+        try:
+            db.add_payer(name)
+        except Exception as e:
+            await message.answer(f"Что-то пошло не так: {e}")
+        else:
+            await message.answer(f"{name} добавлен(-а) в список сурикатов!")
+    await state.finish()
 
 
 @dp.message_handler(commands=['clear_costs'])
