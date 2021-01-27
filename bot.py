@@ -1,15 +1,18 @@
+import numpy as np
+import PIL.Image as Image
+from typing import Dict, List
 from aiogram import Bot
-from aiogram.dispatcher import Dispatcher
+from aiogram import types
+from aiogram.dispatcher import Dispatcher, FSMContext
 from aiogram.utils import executor
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.dispatcher import FSMContext
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 import db.dbms as db
 from bot_config import TOKEN, SELECTED_USERS
-from tools import AccessMiddleware, parse_custom_cost_message
+from tools import AccessMiddleware, parse_custom_cost_message, scan_qr_image
 
 
 # Состояния для приёма ответов-сообщений от пользователя.
@@ -17,10 +20,11 @@ class Statements(StatesGroup):
     adding_payer = State()
 
 
-custom_cost = {'дата': None,
-               'плательщик': None,
-               'сумма': None,
-               'магазин': None}
+cost = {'дата': '',
+        'плательщик': '',
+        'сумма': 0.0,
+        'магазин': ''}
+products = []
 
 
 # Инициализация бота.
@@ -31,7 +35,7 @@ dp.middleware.setup(AccessMiddleware(SELECTED_USERS))
 
 
 @dp.message_handler(commands=['start'])
-async def send_welcome(message):
+async def send_welcome(message: types.Message):
     # содание клавиатуры с кнопками
     markup = ReplyKeyboardMarkup(resize_keyboard=True)
     item1 = KeyboardButton("/total")
@@ -43,7 +47,7 @@ async def send_welcome(message):
 
 
 @dp.message_handler(commands=['help'])
-async def send_help(message):
+async def send_help(message: types.Message):
     await message.answer('Если тебе нужна помощь, то обратись к разработчику: @VSinitsin\n'
                          'Ниже приведён список доступных команд:\n'
                          '/last_costs - последние 5 расходов\n'
@@ -55,11 +59,11 @@ async def send_help(message):
 
 
 @dp.message_handler(commands=['total'])
-async def total(message):
+async def total(message: types.Message):
     await message.answer(db.total_credit())
 
 
-async def send_costs(message, costs):
+async def send_costs(message: types.Message, costs: List):
     """
     Функция для вывода списка расходов.
     :param message:
@@ -76,14 +80,14 @@ async def send_costs(message, costs):
 
 
 @dp.message_handler(commands=['last_costs'])
-async def last_costs(message):
+async def last_costs(message: types.Message):
     costs = db.all_costs()[-5:]
     await send_costs(message, costs)
 
 
 # Обработка команд для удаления расхода по его id.
 @dp.message_handler(lambda message: message.text.startswith('/del'))
-async def del_cost(message):
+async def del_cost(message: types.Message):
     row_id = int(message.text[4:])
     db.delete_cost(row_id)
     answer_message = "❌ Расход удалён ❌"
@@ -91,13 +95,13 @@ async def del_cost(message):
 
 
 @dp.message_handler(commands=['all_costs'])
-async def all_costs(message):
+async def all_costs(message: types.Message):
     costs = db.all_costs()
     await send_costs(message, costs)
 
 
 @dp.message_handler(commands=['all_payers'])
-async def all_payers(message):
+async def all_payers(message: types.Message):
     payers = db.all_payers()
     if not payers:
         await message.answer("Сурикаты не найдены 😢")
@@ -109,14 +113,14 @@ async def all_payers(message):
 
 
 @dp.message_handler(commands=['add_payer'])
-async def add_payer(message):
+async def add_payer(message: types.Message):
     await Statements.adding_payer.set()
     await message.answer("Введите имя плательщика")
 
 
 # Приём имени плательщика.
 @dp.message_handler(state=Statements.adding_payer)
-async def process_message(message, state):
+async def process_message(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         data['text'] = message.text
         name = data['text']
@@ -124,7 +128,7 @@ async def process_message(message, state):
             db.add_payer(name)
         except Exception as e:
             print('Возникла ошибка: ', e)
-            await message.answer(f"🆘 Что-то пошло не так: {e}")
+            await message.answer(f"🆘 Что-то пошло не так:\n{e}")
         else:
             await message.answer(f"✅ {name} добавлен(-а) в список сурикатов!")
             if len(db.all_payers()) < 2:
@@ -135,7 +139,7 @@ async def process_message(message, state):
 
 
 @dp.message_handler(commands=['clear_costs'])
-async def clear_all_costs(message):
+async def clear_all_costs(message: types.Message):
     keyboard = InlineKeyboardMarkup(row_width=1)
     confirmation = InlineKeyboardButton("🚫 Очистить расходы 🚫", callback_data="Очистить расходы")
     keyboard.add(confirmation)
@@ -148,13 +152,13 @@ async def clear_all_costs(message):
 
 # Удаление расходов, подтверждённое пользователем.
 @dp.callback_query_handler(lambda c: c.data == "Очистить расходы")
-async def confirmed_clear_costs(callback_query):
+async def confirmed_clear_costs(callback_query: types.CallbackQuery):
     db.delete_all_costs()
     await bot.send_message(callback_query.message.chat.id, "✅ Все расходы удалены!")
 
 
 @dp.message_handler(commands=['clear_db'])
-async def clear_db(message):
+async def clear_db(message: types.Message):
     keyboard = InlineKeyboardMarkup(row_width=1)
     confirmation = InlineKeyboardButton("🚫 Очистить БД 🚫", callback_data="Очистить БД")
     keyboard.add(confirmation)
@@ -167,12 +171,12 @@ async def clear_db(message):
 
 # Удаление БД, подтверждённое пользователем.
 @dp.callback_query_handler(lambda c: c.data == "Очистить БД")
-async def confirmed_clear_db(callback_query):
+async def confirmed_clear_db(callback_query: types.CallbackQuery):
     db.delete_db()
     await bot.send_message(callback_query.message.chat.id, "✅ База данных полностью очищена!")
 
 
-async def get_keyboard_payers(alias):
+async def get_keyboard_payers(alias: str) -> InlineKeyboardMarkup:
     """
     Возвращает клавиатуру с плательщиками.
     :alias: псевдоним, добавяемый перед callback_data у кнопок.
@@ -186,15 +190,15 @@ async def get_keyboard_payers(alias):
 
 
 @dp.message_handler(content_types=["text"])
-async def add_custom_cost(message):
-    global custom_cost
+async def add_custom_cost(message: types.Message):
+    global cost
 
     if len(db.all_payers()) < 2:
         await message.answer("⚠️ Сурикатов должно быть двое. ⚠️\n"
                              "Добавьте их через команду /add_payer")
     else:
         try:
-            custom_cost = parse_custom_cost_message(message.text)
+            cost = parse_custom_cost_message(message.text)
         except Exception as e:
             print('Возникла ошибка: ', e)
             await message.answer("🆘 Что-то пошло не так...\n"
@@ -204,16 +208,85 @@ async def add_custom_cost(message):
 
 
 @dp.callback_query_handler(lambda c: c.data[:6] == 'custom')
-async def select_payer(callback_query):
-    global custom_cost
+async def select_payer(callback_query: types.CallbackQuery):
+    global cost
 
-    custom_cost['плательщик'] = callback_query.data[7:]
-    db.add_cost(custom_cost)
+    cost['плательщик'] = callback_query.data[7:]
+    db.add_cost(cost)
 
     await bot.send_message(callback_query.message.chat.id,
-                           f"✅ Покупка от {custom_cost['дата']} в {custom_cost['магазин']} "
-                           f"на сумму {custom_cost['сумма']} рублей добавлена в расходы, "
-                           f"которые оплатил(-а) {custom_cost['плательщик']}.")
+                           f"✅ Покупка от {cost['дата']} в {cost['магазин']} "
+                           f"на сумму {cost['сумма']} рублей добавлена в расходы, "
+                           f"которые оплатил(-а) {cost['плательщик']}.")
+
+
+@dp.message_handler(content_types=['photo'])
+async def handle_docs_photo(message: types.Message):
+    global products
+
+    bytes_of_photo = await bot.download_file_by_id(message.photo[-1].file_id)
+
+    img = Image.open(bytes_of_photo)
+    img = np.array(img)
+
+    is_simple = False
+    try:
+        ticket_data = await scan_qr_image(img)
+        is_simple, products = await parse_ticket(ticket_data)
+    except Exception as e:
+        print('Возникла ошибка: ', e)
+        await message.answer(f"🆘 Что-то пошло не так:\n{e}")
+
+    # Если чек простой (нельзя считать каждый продукт отдельно), то обрабатываем его как кастомный расход.
+    if is_simple:
+        await message.answer("Мне не удалось детально просканировать чек 🥺\n"
+                             "Но я могу добавить сумму в нём как общий расход (пополам).\n"
+                             "Выберите, кто оплатил покупку.", reply_markup=await get_keyboard_payers(alias='custom_'))
+    else:
+        keyboard = InlineKeyboardMarkup(row_width=2)
+        button1 = InlineKeyboardButton("❇️ Пополам", callback_data="Пополам")
+        button2 = InlineKeyboardButton("🆚 Уточнить", callback_data="Уточнить")
+        keyboard.add(button1, button2)
+        await message.answer("💙 Отлично! Мне удалось полностью обработать чек.\n"
+                             "Если Вы уверены, что все товары общие, то можно делить сумму чека на двоих пополам ❇️\n"
+                             "Иначе, Вы можете уточнить плательщика для каждого товара 🆚", reply_markup=keyboard)
+
+
+async def parse_ticket(data: Dict) -> (bool, List):
+    global cost
+
+    if not data:
+        raise Exception("Не удалось считать qr-код, чек пустой.")
+    if len(db.all_payers()) < 2:
+        raise Exception("⚠️ Сурикатов должно быть двое. ⚠️\n"
+                        "Добавьте их через команду /add_payer")
+
+    date = data['operation']['date']
+    day, time = date.split('T')
+    y, m, d = day.split('-')
+    cost['дата'] = f"{d}/{m} {time}"
+
+    if not data['ticket']:
+        is_simple = True
+        cost['сумма'] = (int(data['operation']['sum'])/100) / 2
+        cost['магазин'] = "_неизвестном магазине_"
+        products = []
+        return is_simple, products
+
+    is_simple = False
+    if shop := data['ticket']['document']['receipt']['retailPlace']:
+        cost['магазин'] = shop
+    else:
+        cost['магазин'] = data['seller']['name']
+    products = await parse_items(data['ticket']['document']['receipt']['items'])
+    return is_simple, products
+
+
+async def parse_items(items: Dict) -> List:
+    products = []
+    for item in items:
+        products.append([item['name'], item['sum']])
+    return products
 
 
 if __name__ == '__main__':
