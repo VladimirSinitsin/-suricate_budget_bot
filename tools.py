@@ -19,7 +19,8 @@ class AccessMiddleware(BaseMiddleware):
 
     async def on_process_message(self, message, _):
         if int(message.from_user.id) not in self.users_id:
-            await message.answer("Отказано в доступе!\nДля уточнения обратись к разработчику @VSinitsin")
+            await message.answer("Отказано в доступе!\nДля уточнения обратись к разработчику @VSinitsin\n\n"
+                                 f"Ваш user_id: {message.from_user.id}")
             raise CancelHandler()
 
 
