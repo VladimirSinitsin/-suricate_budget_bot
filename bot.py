@@ -80,12 +80,6 @@ async def send_costs(message: types.Message, costs: List):
         await message.answer(answer)
 
 
-@dp.message_handler(commands=['last_costs'])
-async def last_costs(message: types.Message):
-    costs = db.all_costs()[-5:]
-    await send_costs(message, costs)
-
-
 # Обработка команд для удаления расхода по его id.
 @dp.message_handler(lambda message: message.text.startswith('/del'))
 async def del_cost(message: types.Message):
@@ -93,6 +87,14 @@ async def del_cost(message: types.Message):
     db.delete_cost(row_id)
     answer_message = "❌ Расход удалён ❌"
     await message.answer(answer_message)
+    # После удаления выводим все расходы.
+    await send_costs(message, db.all_costs())
+
+
+@dp.message_handler(commands=['last_costs'])
+async def last_costs(message: types.Message):
+    costs = db.all_costs()[-5:]
+    await send_costs(message, costs)
 
 
 @dp.message_handler(commands=['all_costs'])
@@ -155,6 +157,8 @@ async def clear_all_costs(message: types.Message):
 @dp.callback_query_handler(lambda c: c.data == "Очистить расходы")
 async def confirmed_clear_costs(callback_query: types.CallbackQuery):
     db.delete_all_costs()
+    # Удаляем кнопку подтверждения.
+    await callback_query.message.delete_reply_markup()
     await bot.send_message(callback_query.message.chat.id, "✅ Все расходы удалены!")
 
 
@@ -174,6 +178,8 @@ async def clear_db(message: types.Message):
 @dp.callback_query_handler(lambda c: c.data == "Очистить БД")
 async def confirmed_clear_db(callback_query: types.CallbackQuery):
     db.delete_db()
+    # Удаляем кнопку подтверждения.
+    await callback_query.message.delete_reply_markup()
     await bot.send_message(callback_query.message.chat.id, "✅ База данных полностью очищена!")
 
 
@@ -186,7 +192,7 @@ async def get_keyboard_payers(alias: str) -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(row_width=2)
     for payer in db.all_payers():
         button = InlineKeyboardButton(payer, callback_data=str(alias+payer))
-        keyboard.add(button)
+        keyboard.insert(button)
     return keyboard
 
 
@@ -198,6 +204,8 @@ async def select_payer_simple(callback_query: types.CallbackQuery):
     cost['плательщик'] = callback_query.data[7:]
     db.add_cost(cost)
 
+    # Удаляем кнопки выбора.
+    await callback_query.message.delete_reply_markup()
     await bot.send_message(callback_query.message.chat.id,
                            f"✅ Покупка от {cost['дата']} в {cost['магазин']} "
                            f"на сумму {cost['сумма']} рублей добавлена в расходы, "
@@ -226,6 +234,7 @@ async def add_custom_cost(message: types.Message):
 # Обработка фото чека с qr-кодом.
 @dp.message_handler(content_types=['photo'])
 async def handle_docs_photo(message: types.Message):
+    global cost
     global products
 
     # Получаем изображение в виде экземпляра io.BytesIO.
@@ -246,7 +255,8 @@ async def handle_docs_photo(message: types.Message):
 
     # Если чек простой (нельзя считать каждый продукт отдельно), то обрабатываем его как кастомный расход.
     if is_simple:
-        await message.answer("Мне не удалось детально просканировать чек 🥺\n"
+        await message.answer("Мне не удалось детально просканировать чек 🥺\n\n"
+                             f"Чек из {cost['магазин']} на сумму {cost['сумма']}.\n\n"
                              "Но я могу добавить сумму в нём как общий расход (пополам).\n"
                              "Выберите, кто оплатил покупку.", reply_markup=await get_keyboard_payers(alias='simple_'))
     else:
@@ -254,7 +264,8 @@ async def handle_docs_photo(message: types.Message):
         button1 = InlineKeyboardButton("❇️ Пополам", callback_data="Пополам")
         button2 = InlineKeyboardButton("🆚 Уточнить", callback_data="Уточнить")
         keyboard.add(button1, button2)
-        await message.answer("💙 Отлично! Мне удалось полностью обработать чек.\n"
+        await message.answer("💙 Отлично! Мне удалось полностью обработать чек.\n\n"
+                             f"Чек из {cost['магазин']} на сумму {cost['сумма']}.\n\n"
                              "Если Вы уверены, что все товары общие, то можно делить сумму чека на двоих пополам ❇️\n"
                              "Иначе, Вы можете уточнить плательщика для каждого товара 🆚", reply_markup=keyboard)
 
@@ -333,6 +344,8 @@ async def select_payer_simple(callback_query: types.CallbackQuery):
 
     individual_products = []
 
+    await callback_query.message.delete_reply_markup()
+
     cost['плательщик'] = callback_query.data[7:]
 
     await bot.send_message(callback_query.message.chat.id, "🆚 Для каждого товара выберите покупателя.\n"
@@ -343,7 +356,7 @@ async def select_payer_simple(callback_query: types.CallbackQuery):
     # В callback_data делаем префикс с номером товара.
     for index, product in enumerate(products):
         name, sum = product
-        await bot.send_message(callback_query.message.chat.id, f"{name} - {sum}",
+        await bot.send_message(callback_query.message.chat.id, f"{sum} - {name}",
                                reply_markup=await get_keyboard_payers(alias=f'{index}_'))
 
     ending_keyboard = InlineKeyboardMarkup(row_width=1)
@@ -367,6 +380,8 @@ async def select_payer_product(callback_query: types.CallbackQuery):
     if payer != cost['плательщик']:
         individual_products.append(current_product)
 
+    await callback_query.message.delete()
+
 
 @dp.callback_query_handler(lambda c: c.data == "Заврешить уточнение")
 async def ending_ticket(callback_query: types.CallbackQuery):
@@ -382,6 +397,7 @@ async def ending_ticket(callback_query: types.CallbackQuery):
 
     db.add_cost(cost)
 
+    await callback_query.message.delete_reply_markup()
     await bot.send_message(callback_query.message.chat.id,
                            f"✅ Покупка от {cost['дата']} в {cost['магазин']} "
                            f"на сумму {cost['сумма']} рублей добавлена в расходы, "
