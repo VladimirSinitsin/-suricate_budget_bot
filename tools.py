@@ -1,5 +1,3 @@
-import json
-import cv2
 import datetime
 import pytz
 import re
@@ -8,7 +6,6 @@ from typing import Dict, List
 from aiogram.dispatcher.handler import CancelHandler
 from aiogram.dispatcher.middlewares import BaseMiddleware
 
-import db.dbms as db
 from nalog_python import NalogRuPython
 
 
@@ -24,7 +21,6 @@ class AccessMiddleware(BaseMiddleware):
         if int(message.from_user.id) not in self.users_id:
             await message.answer("Отказано в доступе!\nДля уточнения обратись к разработчику @VSinitsin")
             raise CancelHandler()
-
 
 
 def get_now_formatted() -> str:
@@ -56,10 +52,10 @@ def parse_custom_cost_message(raw_message: str) -> Dict:
     return {'магазин': shop, 'сумма': price, 'дата': get_now_formatted()}
 
 
-async def scan_qr_image(image) -> str:
+async def scan_qr_image(image) -> Dict:
     """
     Обрабатывает qr-код чека на снимке.
-    :param filename:
+    :param image: изображение в виде numpy массива.
     :return: данные по чеку в виде json дампа.
     """
     # Находим qr-коды на изображении и обрабатываем их.
@@ -74,5 +70,4 @@ async def scan_qr_image(image) -> str:
     # Обрабатываем текст из qr-кода чека.
     client = NalogRuPython()
     ticket = client.get_ticket(qr_data)
-    result = json.dumps(ticket, indent=4, ensure_ascii=False)
-    return result
+    return ticket
