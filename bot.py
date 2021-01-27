@@ -307,5 +307,12 @@ async def parse_items(items: List) -> List:
     return products
 
 
+# Если в отсканированном чеке не было индивидуальных покупок.
+@dp.callback_query_handler(lambda c: c.data == "Пополам")
+async def half_ticket(callback_query: types.CallbackQuery):
+    await bot.send_message(callback_query.message.chat.id, "Кто оплатил покупку? 🧐",
+                           reply_markup=await get_keyboard_payers(alias='simple_'))
+
+
 if __name__ == '__main__':
     executor.start_polling(dp)
