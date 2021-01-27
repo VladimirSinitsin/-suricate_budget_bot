@@ -189,6 +189,21 @@ async def get_keyboard_payers(alias: str) -> InlineKeyboardMarkup:
     return keyboard
 
 
+# Отлавливает плательщика у простого расхода.
+@dp.callback_query_handler(lambda c: c.data[:6] == 'simple')
+async def select_payer(callback_query: types.CallbackQuery):
+    global cost
+
+    cost['плательщик'] = callback_query.data[7:]
+    db.add_cost(cost)
+
+    await bot.send_message(callback_query.message.chat.id,
+                           f"✅ Покупка от {cost['дата']} в {cost['магазин']} "
+                           f"на сумму {cost['сумма']} рублей добавлена в расходы, "
+                           f"которые оплатил(-а) {cost['плательщик']}.")
+
+
+# Расход, записанный вручную. Например, "такси - 160".
 @dp.message_handler(content_types=["text"])
 async def add_custom_cost(message: types.Message):
     global cost
@@ -204,44 +219,35 @@ async def add_custom_cost(message: types.Message):
             await message.answer("🆘 Что-то пошло не так...\n"
                                  "⚠ Вводите расходы в виде МАГАЗИН - СТОИМОСТЬ. ⚠")
         else:
-            await message.answer("Кто оплатил покупку? 🧐", reply_markup=await get_keyboard_payers(alias='custom_'))
+            await message.answer("Кто оплатил покупку? 🧐", reply_markup=await get_keyboard_payers(alias='simple_'))
 
 
-@dp.callback_query_handler(lambda c: c.data[:6] == 'custom')
-async def select_payer(callback_query: types.CallbackQuery):
-    global cost
-
-    cost['плательщик'] = callback_query.data[7:]
-    db.add_cost(cost)
-
-    await bot.send_message(callback_query.message.chat.id,
-                           f"✅ Покупка от {cost['дата']} в {cost['магазин']} "
-                           f"на сумму {cost['сумма']} рублей добавлена в расходы, "
-                           f"которые оплатил(-а) {cost['плательщик']}.")
-
-
+# Обработка фото чека с qr-кодом.
 @dp.message_handler(content_types=['photo'])
 async def handle_docs_photo(message: types.Message):
     global products
 
+    # Получаем изображение в виде экземпляра io.BytesIO.
     bytes_of_photo = await bot.download_file_by_id(message.photo[-1].file_id)
 
+    # Приводим к numpy массиву.
     img = Image.open(bytes_of_photo)
     img = np.array(img)
 
-    is_simple = False
     try:
+        # Получаем данные из qr-кода на изображении и обрабатываем их (основной расход глобальный).
         ticket_data = await scan_qr_image(img)
         is_simple, products = await parse_ticket(ticket_data)
     except Exception as e:
         print('Возникла ошибка: ', e)
         await message.answer(f"🆘 Что-то пошло не так:\n{e}")
+        return
 
     # Если чек простой (нельзя считать каждый продукт отдельно), то обрабатываем его как кастомный расход.
     if is_simple:
         await message.answer("Мне не удалось детально просканировать чек 🥺\n"
                              "Но я могу добавить сумму в нём как общий расход (пополам).\n"
-                             "Выберите, кто оплатил покупку.", reply_markup=await get_keyboard_payers(alias='custom_'))
+                             "Выберите, кто оплатил покупку.", reply_markup=await get_keyboard_payers(alias='simple_'))
     else:
         keyboard = InlineKeyboardMarkup(row_width=2)
         button1 = InlineKeyboardButton("❇️ Пополам", callback_data="Пополам")
@@ -253,6 +259,11 @@ async def handle_docs_photo(message: types.Message):
 
 
 async def parse_ticket(data: Dict) -> (bool, List):
+    """
+    Обрабатывает данные из чека. Сохраняет их в глобальный расход.
+    :param data: данные, полученные из qr-кода чека.
+    :return: являяется ли чек "простым"; список продуктов.
+    """
     global cost
 
     if not data:
@@ -266,23 +277,30 @@ async def parse_ticket(data: Dict) -> (bool, List):
     y, m, d = day.split('-')
     cost['дата'] = f"{d}/{m} {time}"
 
-    if not data['ticket']:
+    cost['сумма'] = (int(data['operation']['sum'])/100) / 2
+
+    if 'ticket' not in data:
         is_simple = True
-        cost['сумма'] = (int(data['operation']['sum'])/100) / 2
         cost['магазин'] = "_неизвестном магазине_"
         products = []
         return is_simple, products
 
     is_simple = False
-    if shop := data['ticket']['document']['receipt']['retailPlace']:
-        cost['магазин'] = shop
-    else:
+    # В старых чеках нет поля retailPlace, поэтому название берём из ['seller']['name'].
+    if 'retailPlace' not in data['ticket']['document']['receipt']:
         cost['магазин'] = data['seller']['name']
+    else:
+        cost['магазин'] = data['ticket']['document']['receipt']['retailPlace']
     products = await parse_items(data['ticket']['document']['receipt']['items'])
     return is_simple, products
 
 
-async def parse_items(items: Dict) -> List:
+async def parse_items(items: List) -> List:
+    """
+    Обрабатывает товары.
+    :param items: список товаров-словарей.
+    :return: список товаров-списов (0 - название, 1 - сумма).
+    """
     products = []
     for item in items:
         products.append([item['name'], item['sum']])
