@@ -135,7 +135,7 @@ def all_costs() -> List:
     cursor.execute("SELECT * "
                    "FROM Cost ")
     rows = cursor.fetchall()
-    costs = [f"{row[0]}) {row[1]} {row[2]} совершил(-а) покупку на {row[3]} в {row[4]}" for row in rows]
+    costs = [f"{row[0]}) {row[1]} {row[2]} одолжил(-а) на покупку {row[3]} рублей в {row[4]}" for row in rows]
     return costs
 
 
