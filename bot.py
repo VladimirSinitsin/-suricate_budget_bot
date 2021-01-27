@@ -25,6 +25,7 @@ cost = {'дата': '',
         'сумма': 0.0,
         'магазин': ''}
 products = []
+individual_products = []
 
 
 # Инициализация бота.
@@ -191,7 +192,7 @@ async def get_keyboard_payers(alias: str) -> InlineKeyboardMarkup:
 
 # Отлавливает плательщика у простого расхода.
 @dp.callback_query_handler(lambda c: c.data[:6] == 'simple')
-async def select_payer(callback_query: types.CallbackQuery):
+async def select_payer_simple(callback_query: types.CallbackQuery):
     global cost
 
     cost['плательщик'] = callback_query.data[7:]
@@ -277,7 +278,7 @@ async def parse_ticket(data: Dict) -> (bool, List):
     y, m, d = day.split('-')
     cost['дата'] = f"{d}/{m} {time}"
 
-    cost['сумма'] = (int(data['operation']['sum'])/100) / 2
+    cost['сумма'] = int(data['operation']['sum'])/100
 
     if 'ticket' not in data:
         is_simple = True
@@ -303,15 +304,88 @@ async def parse_items(items: List) -> List:
     """
     products = []
     for item in items:
-        products.append([item['name'], item['sum']])
+        products.append([item['name'], int(item['sum'])/100])
     return products
 
 
 # Если в отсканированном чеке не было индивидуальных покупок.
 @dp.callback_query_handler(lambda c: c.data == "Пополам")
 async def half_ticket(callback_query: types.CallbackQuery):
+    global cost
+
+    cost['сумма'] = cost['сумма'] / 2
     await bot.send_message(callback_query.message.chat.id, "Кто оплатил покупку? 🧐",
                            reply_markup=await get_keyboard_payers(alias='simple_'))
+
+
+# Если в отсканированном чеке были индивидуальные покупки.
+@dp.callback_query_handler(lambda c: c.data == "Уточнить")
+async def individual_ticket(callback_query: types.CallbackQuery):
+    await bot.send_message(callback_query.message.chat.id, "Кто оплатил покупку? 🧐",
+                           reply_markup=await get_keyboard_payers(alias='ticket_'))
+
+
+# После того, как узнали плательщика.
+@dp.callback_query_handler(lambda c: c.data[:6] == 'ticket')
+async def select_payer_simple(callback_query: types.CallbackQuery):
+    global cost
+    global individual_products
+
+    individual_products = []
+
+    cost['плательщик'] = callback_query.data[7:]
+
+    await bot.send_message(callback_query.message.chat.id, "🆚 Для каждого товара выберите покупателя.\n"
+                                                           "💤 Если товар общий, то ничего не нажимайте.\n"
+                                                           "Когда закончите, то нажмите кнопку в самом конце списка ✅")
+
+    # Выводим все товары отдельно с кнопками выбора плательщика.
+    # В callback_data делаем префикс с номером товара.
+    for index, product in enumerate(products):
+        name, sum = product
+        await bot.send_message(callback_query.message.chat.id, f"{name} - {sum}",
+                               reply_markup=await get_keyboard_payers(alias=f'{index}_'))
+
+    ending_keyboard = InlineKeyboardMarkup(row_width=1)
+    button = InlineKeyboardButton('✅ Заврешить уточнение', callback_data='Заврешить уточнение')
+    ending_keyboard.add(button)
+    await bot.send_message(callback_query.message.chat.id, "Если все товары определены, то нажмите кнопку ниже",
+                           reply_markup=ending_keyboard)
+
+
+# Обработка каждого товара.
+@dp.callback_query_handler(lambda c: c.data.split('_')[0].isdigit())
+async def select_payer_product(callback_query: types.CallbackQuery):
+    product_index = int(callback_query.data.split('_')[0])
+    current_product = products[product_index]
+    product_name, sum = current_product
+    payer = callback_query.data.split('_')[1]
+
+    # Если индивидуальный товар плательщика, то просто вычитаем из общей суммы.
+    # Иначе запоминаем, чтобы потом прибавить отдельно.
+    cost['сумма'] -= sum
+    if payer != cost['плательщик']:
+        individual_products.append(current_product)
+
+
+@dp.callback_query_handler(lambda c: c.data == "Заврешить уточнение")
+async def ending_ticket(callback_query: types.CallbackQuery):
+    global cost
+    global individual_products
+
+    # Делим общую (без индивидуальных товаров) сумму пополам.
+    cost['сумма'] = cost['сумма'] / 2
+    # И прибывляем сумму каждого индивидуального товара того, кто не платил.
+    for product in individual_products:
+        _, sum = product
+        cost['сумма'] += sum
+
+    db.add_cost(cost)
+
+    await bot.send_message(callback_query.message.chat.id,
+                           f"✅ Покупка от {cost['дата']} в {cost['магазин']} "
+                           f"на сумму {cost['сумма']} рублей добавлена в расходы, "
+                           f"которые оплатил(-а) {cost['плательщик']}.")
 
 
 if __name__ == '__main__':
