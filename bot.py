@@ -7,8 +7,8 @@ from aiogram.dispatcher import Dispatcher, FSMContext
 from aiogram.utils import executor
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
+# from aiogram.contrib.middlewares.logging import LoggingMiddleware
 
 import db.dbms as db
 from bot_config import TOKEN, SELECTED_USERS
@@ -31,8 +31,8 @@ individual_products = []
 # Инициализация бота.
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
-# dp.middleware.setup(LoggingMiddleware())
 dp.middleware.setup(AccessMiddleware(SELECTED_USERS))
+# dp.middleware.setup(LoggingMiddleware())
 
 
 @dp.message_handler(commands=['start'])
@@ -109,7 +109,7 @@ async def all_payers(message: types.Message):
     if not payers:
         await message.answer("Сурикаты не найдены 😢")
     else:
-        answer = 'Сурикаты:\n\n'
+        answer = '🌿 Сурикаты:\n\n'
         for payer in payers:
             answer += payer + '\n'
         await message.answer(answer)
