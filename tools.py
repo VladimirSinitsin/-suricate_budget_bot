@@ -40,16 +40,24 @@ def parse_custom_cost_message(raw_message: str) -> Dict:
     :param raw_message: расход (форма: МАГАЗИН - СУММА)
     :return: словарь-расход.
     """
+    # Разбиваем на две части, и убираем пробел, если есть в конце названия.
+    elements = raw_message.split('-')
+    price = elements[-1]
+    shop = raw_message.split('-'+price)[0]
+
+    if len(elements) < 2 or shop.isdigit():
+        raise Exception ('Ошибка в обработке сообщения')
+
+    if shop[-1] == " ":
+        shop = shop[:-1]
+
+    # Находим число-цену.
     try:
-        # Разбиваем на две части, и убираем пробел, если есть в конце названия.
-        shop, price = raw_message.split('-')
-        if shop[-1] == " ":
-            shop = shop[:-1]
-        # Находим число-цену.
         price = re.findall(r"[-+]?\d*\.\d+|\d+", price)[0]
         price = float(price) / 2
-    except Exception as e:
-        raise e
+    except:
+        raise Exception('Ошибка в обработке сообщения')
+
     return {'магазин': shop, 'сумма': price, 'дата': get_now_formatted()}
 
 
