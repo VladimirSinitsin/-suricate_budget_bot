@@ -1,7 +1,5 @@
 .idea
 __pycache__
 
-.env
-*.jpg
 credits.db
 bot_config.py

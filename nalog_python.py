@@ -1,7 +1,6 @@
-import os
-
 import requests
-from dotenv import load_dotenv
+
+from bot_config import INN, PASSWORD, CLIENT_SECRET
 
 
 class NalogRuPython:
@@ -14,7 +13,6 @@ class NalogRuPython:
     ACCEPT_LANGUAGE = 'ru-RU;q=1, en-US;q=0.9'
 
     def __init__(self):
-        load_dotenv()  # read environments from .env file
         self.__session_id = None
         self.set_session_id()
 
@@ -22,18 +20,11 @@ class NalogRuPython:
         """
         Authorization using INN and password of user lk nalog.ru
         """
-        if os.getenv('CLIENT_SECRET') is None:
-            raise ValueError('OS environments not content "CLIENT_SECRET"')
-        if os.getenv('INN') is None:
-            raise ValueError('OS environments not content "INN"')
-        if os.getenv('PASSWORD') is None:
-            raise ValueError('OS environments not content "PASSWORD"')
-
         url = f'https://{self.HOST}/v2/mobile/users/lkfl/auth'
         payload = {
-            'inn': os.getenv('INN'),
-            'client_secret': os.getenv('CLIENT_SECRET'),
-            'password': os.getenv('PASSWORD')
+            'inn': INN,
+            'client_secret': CLIENT_SECRET,
+            'password': PASSWORD
         }
         headers = {
             'Host': self.HOST,
