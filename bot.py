@@ -18,6 +18,7 @@ from tools import AccessMiddleware, parse_custom_cost_message, scan_qr_image
 # Состояния для приёма ответов-сообщений от пользователя.
 class Statements(StatesGroup):
     adding_payer = State()
+    naming_shop = State()
 
 
 cost = {'дата': '',
@@ -123,7 +124,7 @@ async def add_payer(message: types.Message):
 
 # Приём имени плательщика.
 @dp.message_handler(state=Statements.adding_payer)
-async def process_message(message: types.Message, state: FSMContext):
+async def add_payer_name(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         data['text'] = message.text
         name = data['text']
@@ -183,7 +184,7 @@ async def confirmed_clear_db(callback_query: types.CallbackQuery):
     await bot.send_message(callback_query.message.chat.id, "✅ База данных полностью очищена!")
 
 
-async def get_keyboard_payers(alias: str) -> InlineKeyboardMarkup:
+async def get_keyboard_payers(alias: str, need_cancel=True) -> InlineKeyboardMarkup:
     """
     Возвращает клавиатуру с плательщиками.
     :alias: псевдоним, добавяемый перед callback_data у кнопок.
@@ -193,7 +194,19 @@ async def get_keyboard_payers(alias: str) -> InlineKeyboardMarkup:
     for payer in db.all_payers():
         button = InlineKeyboardButton(payer, callback_data=str(alias+payer))
         keyboard.insert(button)
+    if need_cancel:
+        cancel_button = InlineKeyboardButton("🚫 Отмена", callback_data='Отмена')
+        keyboard.add(cancel_button)
     return keyboard
+
+
+# Любое нажатие кнопки "Отмена".
+@dp.callback_query_handler(lambda c: c.data == "Отмена")
+async def cancel(callback_query: types.CallbackQuery):
+    # Удаляем кнопку подтверждения.
+    await callback_query.message.delete_reply_markup()
+    await bot.send_message(callback_query.message.chat.id, "✅ Действие отменено!\n"
+                                                           "Можно продолжать работу.")
 
 
 # Отлавливает плательщика у простого расхода.
@@ -237,6 +250,11 @@ async def handle_docs_photo(message: types.Message):
     global cost
     global products
 
+    if len(db.all_payers()) < 2:
+        await message.answer("⚠️ Сурикатов должно быть двое. ⚠️\n"
+                             "Добавьте их через команду /add_payer")
+        return
+
     # Получаем изображение в виде экземпляра io.BytesIO.
     bytes_of_photo = await bot.download_file_by_id(message.photo[-1].file_id)
 
@@ -254,20 +272,53 @@ async def handle_docs_photo(message: types.Message):
         return
 
     # Если чек простой (нельзя считать каждый продукт отдельно), то обрабатываем его как кастомный расход.
+    # Предварительно узнаем из какого магазина чек.
     if is_simple:
+        keyboard = InlineKeyboardMarkup(row_width=2)
+        button1 = InlineKeyboardButton('✴️ Давай', callback_data='Давай')
+        button2 = InlineKeyboardButton('🚫 Отмена', callback_data='Отмена')
+        keyboard.add(button1, button2)
         await message.answer("Мне не удалось детально просканировать чек 🥺\n\n"
-                             f"Чек из {cost['магазин']} на сумму {cost['сумма']}.\n\n"
+                             f"Чек в {cost['магазин']} на сумму {cost['сумма']}.\n\n"
                              "Но я могу добавить сумму в нём как общий расход (пополам).\n"
-                             "Выберите, кто оплатил покупку.", reply_markup=await get_keyboard_payers(alias='simple_'))
+                             "Хотите продолжить?", reply_markup=keyboard)
     else:
         keyboard = InlineKeyboardMarkup(row_width=2)
         button1 = InlineKeyboardButton("❇️ Пополам", callback_data="Пополам")
         button2 = InlineKeyboardButton("🆚 Уточнить", callback_data="Уточнить")
-        keyboard.add(button1, button2)
+        button3 = InlineKeyboardButton('🚫 Отмена', callback_data='Отмена')
+        keyboard.add(button1, button2, button3)
+        products_str = await products2str(products)
         await message.answer("💙 Отлично! Мне удалось полностью обработать чек.\n\n"
                              f"Чек из {cost['магазин']} на сумму {cost['сумма']}.\n\n"
+                             f"Проверьте товары в чеке:\n\n{products_str}\n"
                              "Если Вы уверены, что все товары общие, то можно делить сумму чека на двоих пополам ❇️\n"
                              "Иначе, Вы можете уточнить плательщика для каждого товара 🆚", reply_markup=keyboard)
+
+
+# Пользователь захотел добавить простой чек и ввести название магазина.
+@dp.callback_query_handler(lambda c: c.data == 'Давай')
+async def confirmed_add_shop(callback_query: types.CallbackQuery):
+    await Statements.naming_shop.set()
+    # Удаляем кнопку подтверждения.
+    await callback_query.message.delete_reply_markup()
+    await bot.send_message(callback_query.message.chat.id, "Введите название магазина.")
+
+
+# Запись магазина у простого чека.
+@dp.message_handler(state=Statements.naming_shop)
+async def add_shop(message: types.Message, state: FSMContext):
+    global cost
+
+    cost['сумма'] = cost['сумма'] / 2
+    async with state.proxy() as data:
+        data['text'] = message.text
+        shop = data['text']
+        cost['магазин'] = shop
+    await state.finish()
+    await message.answer(f"Хорошо! Я запомнил, что покупка была произведена в {shop}\n"
+                         f"Кто оплатил покупку? 🧐",
+                         reply_markup=await get_keyboard_payers(alias='simple_', need_cancel=False))
 
 
 async def parse_ticket(data: Dict) -> (bool, List):
@@ -280,9 +331,6 @@ async def parse_ticket(data: Dict) -> (bool, List):
 
     if not data:
         raise Exception("Не удалось считать qr-код, чек пустой.")
-    if len(db.all_payers()) < 2:
-        raise Exception("⚠️ Сурикатов должно быть двое. ⚠️\n"
-                        "Добавьте их через команду /add_payer")
 
     date = data['operation']['date']
     day, time = date.split('T')
@@ -319,6 +367,18 @@ async def parse_items(items: List) -> List:
     return products
 
 
+async def products2str(products: List) -> str:
+    """
+    Возвращает продукты в виде для вывода.
+    :param products: продукты.
+    :return: результат.
+    """
+    result = ''
+    for p in products:
+        result += f'{p[0]} - {p[1]}\n'
+    return result
+
+
 # Если в отсканированном чеке не было индивидуальных покупок.
 @dp.callback_query_handler(lambda c: c.data == "Пополам")
 async def half_ticket(callback_query: types.CallbackQuery):
@@ -326,14 +386,14 @@ async def half_ticket(callback_query: types.CallbackQuery):
 
     cost['сумма'] = cost['сумма'] / 2
     await bot.send_message(callback_query.message.chat.id, "Кто оплатил покупку? 🧐",
-                           reply_markup=await get_keyboard_payers(alias='simple_'))
+                           reply_markup=await get_keyboard_payers(alias='simple_', need_cancel=False))
 
 
 # Если в отсканированном чеке были индивидуальные покупки.
 @dp.callback_query_handler(lambda c: c.data == "Уточнить")
 async def individual_ticket(callback_query: types.CallbackQuery):
     await bot.send_message(callback_query.message.chat.id, "Кто оплатил покупку? 🧐",
-                           reply_markup=await get_keyboard_payers(alias='ticket_'))
+                           reply_markup=await get_keyboard_payers(alias='ticket_', need_cancel=False))
 
 
 # После того, как узнали плательщика.
@@ -357,7 +417,7 @@ async def select_payer_simple(callback_query: types.CallbackQuery):
     for index, product in enumerate(products):
         name, sum = product
         await bot.send_message(callback_query.message.chat.id, f"{sum} - {name}",
-                               reply_markup=await get_keyboard_payers(alias=f'{index}_'))
+                               reply_markup=await get_keyboard_payers(alias=f'{index}_', need_cancel=False))
 
     ending_keyboard = InlineKeyboardMarkup(row_width=1)
     button = InlineKeyboardButton('✅ Заврешить уточнение', callback_data='Заврешить уточнение')
