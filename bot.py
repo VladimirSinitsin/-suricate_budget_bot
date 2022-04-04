@@ -38,7 +38,7 @@ dp.middleware.setup(AccessMiddleware(SELECTED_USERS))
 
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
-    # содание клавиатуры с кнопками
+    # Создание клавиатуры с кнопками.
     markup = ReplyKeyboardMarkup(resize_keyboard=True)
     item1 = KeyboardButton("/total")
     item2 = KeyboardButton("/help")
@@ -187,7 +187,7 @@ async def confirmed_clear_db(callback_query: types.CallbackQuery):
 async def get_keyboard_payers(alias: str, need_cancel=True) -> InlineKeyboardMarkup:
     """
     Возвращает клавиатуру с плательщиками.
-    :alias: псевдоним, добавяемый перед callback_data у кнопок.
+    :alias: псевдоним, добавляемый перед callback_data у кнопок.
     :return: клавиатура с плательщиками.
     """
     keyboard = InlineKeyboardMarkup(row_width=2)
@@ -325,7 +325,7 @@ async def parse_ticket(data: Dict) -> (bool, List):
     """
     Обрабатывает данные из чека. Сохраняет их в глобальный расход.
     :param data: данные, полученные из qr-кода чека.
-    :return: являяется ли чек "простым"; список продуктов.
+    :return: является ли чек "простым"; список продуктов.
     """
     global cost
 
@@ -359,7 +359,7 @@ async def parse_items(items: List) -> List:
     """
     Обрабатывает товары.
     :param items: список товаров-словарей.
-    :return: список товаров-списов (0 - название, 1 - сумма).
+    :return: список товаров-списков (0 - название, 1 - сумма).
     """
     products = []
     for item in items:
@@ -396,7 +396,7 @@ async def individual_ticket(callback_query: types.CallbackQuery):
                            reply_markup=await get_keyboard_payers(alias='ticket_', need_cancel=False))
 
 
-# После того, как узнали плательщика.
+# После того как узнали плательщика.
 @dp.callback_query_handler(lambda c: c.data[:6] == 'ticket')
 async def select_payer_simple(callback_query: types.CallbackQuery):
     global cost
@@ -450,7 +450,7 @@ async def ending_ticket(callback_query: types.CallbackQuery):
 
     # Делим общую (без индивидуальных товаров) сумму пополам.
     cost['сумма'] = cost['сумма'] / 2
-    # И прибывляем сумму каждого индивидуального товара того, кто не платил.
+    # И прибавляем сумму каждого индивидуального товара того, кто не платил.
     for product in individual_products:
         _, sum = product
         cost['сумма'] += sum
