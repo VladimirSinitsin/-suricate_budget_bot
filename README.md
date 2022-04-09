@@ -1,4 +1,9 @@
-# Введение
+# Suricate bot
+<p align="center" width="100%">
+    <img width="50%" src="https://sun9-18.userapi.com/impf/ZFuLrgObN-IVhJvDrVzGdyeQoW2Q0MrpwxVvEQ/OJlZH0hEFQE.jpg?size=736x578&quality=96&sign=b9d25af7303bfff9cf090ba53bb680da&type=album?raw=true">
+</p>
+
+## Введение
 **Проблема:** 
 У нас с девушкой раздельный бюджет (каждый платит за себя, либо делим пополам).
 Всех всё устраивает, но в такой модели походы в магазин становятся настоящей мукой.
