@@ -80,6 +80,7 @@ docker run -d suricate_bot
 <p align="center" width="100%">
     <img width="50%" src="https://sun9-16.userapi.com/impf/4PC6IYuIaadB4z4kPk-2Wl-iX-jRMD6D-MP20w/gPKCB-dKURw.jpg?size=754x2160&quality=96&sign=779dbd2227b65f62ab8d161742664846&type=album?raw=true">
 </p>
+
 Бот предложит 3 варианта:
 - Если вы ошиблись, то просто нажмите кнопку "Отменить"
 - Если вы знаете, что покупали только общие продукты, то просто нажмите "Пополам"
